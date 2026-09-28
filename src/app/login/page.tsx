@@ -6,13 +6,22 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Car, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
-import { login, type ApiError } from "@/lib/api";
+import { login, fetchMe, type ApiError } from "@/lib/api";
 
 interface LoginForm {
   email: string;
   password: string;
   remember: boolean;
 }
+
+// Where each role lands after signing in.
+// Change "/" to "/dashboard" once customer accounts have their own dashboard.
+const ROLE_REDIRECTS: Record<string, string> = {
+  admin: "/admin",
+  user: "/",
+};
+
+const DEFAULT_REDIRECT = "/";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,13 +50,30 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(form);
-      // Auth state now lives in the httpOnly session cookie set by
-      // the API response — nothing to store client side.
-      // TODO: once customer accounts get their own dashboard, branch
-      // this on the logged-in user's role (e.g. data.user.role) and
-      // send non-admins to their own "/dashboard" instead.
-      router.push("/admin");
+      const data = await login(form);
+
+      // Use the role from the login response; if the API doesn't return
+      // the user there, fall back to /me (the session cookie is already set).
+      // The redirect is only for UX — /admin must still be protected on the
+      // server (middleware / layout) and in the API.
+      const role = data?.user?.role ?? (await fetchMe()).user.role;
+
+      // If we were sent here from a protected page (e.g. checkout), go back
+      // there. Only same-site paths are allowed, to avoid open redirects.
+      const redirectParam = new URLSearchParams(window.location.search).get(
+        "redirect",
+      );
+      const safeRedirect =
+        redirectParam &&
+        redirectParam.startsWith("/") &&
+        !redirectParam.startsWith("//")
+          ? redirectParam
+          : null;
+
+      const destination =
+        safeRedirect ?? ROLE_REDIRECTS[role] ?? DEFAULT_REDIRECT;
+
+      router.push(destination);
       router.refresh();
     } catch (err) {
       const apiErr = err as ApiError;

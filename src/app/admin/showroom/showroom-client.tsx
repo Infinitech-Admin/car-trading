@@ -4,12 +4,14 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  AlertTriangle,
   Car,
   Loader2,
-  MoreVertical,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import {
   deleteVehicle,
@@ -39,6 +41,96 @@ const STATUS_LABELS: Record<Vehicle["status"], string> = {
   sold: "Sold",
 };
 
+/* -------------------------------------------------------------------------- */
+/*  Reusable dialog                                                           */
+/* -------------------------------------------------------------------------- */
+
+function Dialog({
+  open,
+  onClose,
+  children,
+  busy = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  /** Kapag true, hindi ma-close ang dialog (hal. habang nagdedelete). */
+  busy?: boolean;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
+      {/* Panel */}
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#1a2332] p-6 shadow-2xl">
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Row action icons (always visible)                                         */
+/* -------------------------------------------------------------------------- */
+
+function RowActions({
+  vehicle,
+  onEdit,
+  onDelete,
+}: {
+  vehicle: Vehicle;
+  onEdit: (v: Vehicle) => void;
+  onDelete: (v: Vehicle) => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <button
+        type="button"
+        onClick={() => onEdit(vehicle)}
+        title="Edit"
+        aria-label={`Edit ${vehicle.name}`}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-300 transition-colors hover:border-[#d9ae1f]/50 hover:bg-[#d9ae1f]/10 hover:text-[#d9ae1f]"
+      >
+        <Pencil size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(vehicle)}
+        title="Delete"
+        aria-label={`Delete ${vehicle.name}`}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-300 transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Page                                                                      */
+/* -------------------------------------------------------------------------- */
+
 export default function ShowroomClient({
   imageBaseUrl,
 }: {
@@ -54,13 +146,13 @@ export default function ShowroomClient({
   const [drawerVehicle, setDrawerVehicle] = useState<
     Vehicle | null | undefined
   >(undefined);
-  const [menu, setMenu] = useState<{
-    vehicle: Vehicle;
-    top: number;
-    left: number;
-  } | null>(null);
-  const [mounted, setMounted] = useState(false);
 
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -82,20 +174,6 @@ export default function ShowroomClient({
     load();
   }, [load]);
 
-  // Close the row menu on scroll/resize so it never ends up pointing at
-  // the wrong row, since its position is a one-time snapshot of the
-  // button's screen coordinates rather than something that tracks layout.
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [menu]);
-
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {
       const matchesSearch =
@@ -106,35 +184,29 @@ export default function ShowroomClient({
     });
   }, [vehicles, search, statusFilter]);
 
-  function toggleMenu(
-    vehicle: Vehicle,
-    e: React.MouseEvent<HTMLButtonElement>,
-  ) {
-    if (menu?.vehicle.id === vehicle.id) {
-      setMenu(null);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const MENU_WIDTH = 128; // matches w-32 below
-    setMenu({
-      vehicle,
-      top: rect.bottom + 4,
-      left: Math.min(
-        rect.right - MENU_WIDTH,
-        window.innerWidth - MENU_WIDTH - 8,
-      ),
-    });
-  }
+  const openDeleteDialog = (vehicle: Vehicle) => {
+    setDeleteError("");
+    setDeleteTarget(vehicle);
+  };
 
-  async function handleDelete(vehicle: Vehicle) {
-    if (!confirm(`Delete "${vehicle.name}"? This can't be undone.`)) return;
+  const closeDeleteDialog = useCallback(() => {
+    setDeleteTarget(null);
+    setDeleteError("");
+  }, []);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
     try {
-      await deleteVehicle(vehicle.id);
-      setVehicles((prev) => prev.filter((v) => v.id !== vehicle.id));
+      await deleteVehicle(deleteTarget.id);
+      setVehicles((prev) => prev.filter((v) => v.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err) {
-      alert((err as ApiError).message || "Failed to delete vehicle.");
+      setDeleteError((err as ApiError).message || "Failed to delete vehicle.");
+    } finally {
+      setDeleting(false);
     }
-    setMenu(null);
   }
 
   return (
@@ -219,7 +291,7 @@ export default function ShowroomClient({
                   <th className="px-5 py-3 font-medium">Mileage</th>
                   <th className="px-5 py-3 font-medium">Stock</th>
                   <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium"></th>
+                  <th className="px-5 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -259,14 +331,12 @@ export default function ShowroomClient({
                         {STATUS_LABELS[v.status]}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={(e) => toggleMenu(v, e)}
-                        className="text-slate-500 hover:text-white"
-                        aria-label="More options"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
+                    <td className="px-5 py-3">
+                      <RowActions
+                        vehicle={v}
+                        onEdit={setDrawerVehicle}
+                        onDelete={openDeleteDialog}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -291,7 +361,7 @@ export default function ShowroomClient({
                 key={v.id}
                 className="rounded-2xl border border-white/10 bg-[#232b3d]/70 p-4"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#d9ae1f]/15 text-[#d9ae1f]">
                       {v.image ? (
@@ -314,13 +384,11 @@ export default function ShowroomClient({
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => toggleMenu(v, e)}
-                    className="text-slate-500 hover:text-white"
-                    aria-label="More options"
-                  >
-                    <MoreVertical size={16} />
-                  </button>
+                  <RowActions
+                    vehicle={v}
+                    onEdit={setDrawerVehicle}
+                    onDelete={openDeleteDialog}
+                  />
                 </div>
 
                 <div className="mt-4 flex items-center justify-between text-sm">
@@ -347,34 +415,64 @@ export default function ShowroomClient({
         </>
       )}
 
-      {menu && (
-        <>
-          {/* Transparent overlay to catch outside clicks; sits below the
-              menu itself and above everything else, and is unaffected by
-              any ancestor's overflow-hidden since it's fixed to the
-              viewport rather than nested in the table. */}
-          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
-          <div
-            className="fixed z-50 w-32 overflow-hidden rounded-xl border border-white/10 bg-[#1a2332] shadow-xl"
-            style={{ top: menu.top, left: menu.left }}
-          >
+      {/* Delete confirmation dialog */}
+      {mounted && (
+        <Dialog
+          open={!!deleteTarget}
+          onClose={closeDeleteDialog}
+          busy={deleting}
+        >
+          <div className="flex items-start gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+              <AlertTriangle size={20} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-white">Delete vehicle?</h2>
+              <p className="mt-1.5 text-sm leading-6 text-slate-400">
+                You’re about to delete{" "}
+                <span className="font-semibold text-white">
+                  {deleteTarget?.name}
+                </span>
+                . This action can’t be undone.
+              </p>
+            </div>
+          </div>
+
+          {deleteError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {deleteError}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
-              onClick={() => {
-                setDrawerVehicle(menu.vehicle);
-                setMenu(null);
-              }}
-              className="block w-full px-3.5 py-2.5 text-left text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+              type="button"
+              onClick={closeDeleteDialog}
+              disabled={deleting}
+              className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
             >
-              Edit
+              Cancel
             </button>
             <button
-              onClick={() => handleDelete(menu.vehicle)}
-              className="block w-full px-3.5 py-2.5 text-left text-xs text-red-400 hover:bg-red-500/10"
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="flex items-center justify-center gap-2 rounded-full bg-red-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
             >
-              Delete
+              {deleting ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={15} />
+                  Delete
+                </>
+              )}
             </button>
           </div>
-        </>
+        </Dialog>
       )}
 
       {drawerVehicle !== undefined && (

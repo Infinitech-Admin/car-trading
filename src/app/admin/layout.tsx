@@ -41,7 +41,7 @@ function getInitials(name?: string | null): string {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Showroom", href: "/admin/showroom", icon: Warehouse },
-  { label: "Orders", href: "/admin/orders", icon: ShoppingCart, soon: true },
+  { label: "Orders", href: "/admin/orders", icon: ShoppingCart },
   { label: "Customers", href: "/admin/customers", icon: Users, soon: true },
   { label: "Settings", href: "/admin/settings", icon: Settings, soon: true },
 ];

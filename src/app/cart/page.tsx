@@ -22,10 +22,16 @@ const formatPrice = (value: number) =>
   `₱${value.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 
 export default function CartPage() {
-  const { items, removeFromCart, updateQuantity, clearCart, totalItems } =
-    useCart();
+  const {
+    items,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    totalItems,
+    isHydrated,
+  } = useCart();
 
-  const subtotal = useMemo(
+  const total = useMemo(
     () =>
       items.reduce(
         (sum, item) => sum + getPriceValue(item.price) * item.quantity,
@@ -33,9 +39,6 @@ export default function CartPage() {
       ),
     [items],
   );
-
-  const reservationFee = items.length > 0 ? 5000 : 0;
-  const total = subtotal + reservationFee;
 
   return (
     <>
@@ -62,15 +65,31 @@ export default function CartPage() {
               Your Cart
             </h1>
             <p className="mt-3 text-sm text-zinc-400 sm:text-base">
-              {totalItems > 0
-                ? `${totalItems} vehicle${totalItems === 1 ? "" : "s"} reserved for review`
-                : "No vehicles added yet"}
+              {!isHydrated
+                ? "Loading your cart..."
+                : totalItems > 0
+                  ? `${totalItems} vehicle${totalItems === 1 ? "" : "s"} reserved for review`
+                  : "No vehicles added yet"}
             </p>
           </div>
         </section>
 
         <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          {items.length === 0 ? (
+          {!isHydrated ? (
+            // Cart is still loading (saved cart is fetched from the server) —
+            // show placeholders instead of flashing "Your cart is empty".
+            <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+              <div className="space-y-4">
+                {[0, 1].map((i) => (
+                  <div
+                    key={i}
+                    className="h-40 animate-pulse rounded-[26px] border border-white/10 bg-[#12110f] sm:h-32"
+                  />
+                ))}
+              </div>
+              <div className="h-56 animate-pulse rounded-[28px] border border-[#BF980D]/20 bg-[#120f0d]" />
+            </div>
+          ) : items.length === 0 ? (
             <div className="rounded-[28px] border border-dashed border-white/15 bg-[#120f0d] px-6 py-20 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#BF980D]/30 bg-[#BF980D]/10">
                 <ShoppingBag className="text-[#BF980D]" size={26} />
@@ -102,13 +121,25 @@ export default function CartPage() {
                       href={`/showroom/car/${item.id}`}
                       className="relative h-32 w-full shrink-0 overflow-hidden rounded-2xl bg-[#0d0d0d] sm:h-24 sm:w-36"
                     >
-                      <Image
-                        src={item.image}
-                        alt={item.name}
-                        fill
-                        sizes="144px"
-                        className="object-contain p-2"
-                      />
+                      {item.image ? (
+                        // `unoptimized` — same as the showroom & details
+                        // pages. The image comes from the Laravel backend
+                        // (localhost:8000 in dev), so it's loaded directly
+                        // instead of going through Next's image optimizer,
+                        // which only allows hosts listed in next.config.
+                        <Image
+                          src={item.image}
+                          alt={item.name}
+                          fill
+                          unoptimized
+                          sizes="144px"
+                          className="object-contain p-2"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-600">
+                          No image
+                        </div>
+                      )}
                     </Link>
 
                     <div className="flex-1">
@@ -179,26 +210,9 @@ export default function CartPage() {
               <div className="rounded-[28px] border border-[#BF980D]/20 bg-[#120f0d] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.35)] lg:sticky lg:top-24">
                 <h2 className="text-lg font-bold text-white">Order summary</h2>
 
-                <div className="mt-5 space-y-3 border-b border-white/10 pb-5 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-400">
-                      Subtotal ({totalItems} item{totalItems === 1 ? "" : "s"})
-                    </span>
-                    <span className="font-semibold text-white">
-                      {formatPrice(subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-400">Reservation fee</span>
-                    <span className="font-semibold text-white">
-                      {formatPrice(reservationFee)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between">
+                <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5">
                   <span className="text-base font-semibold text-white">
-                    Estimated total
+                    Total ({totalItems} item{totalItems === 1 ? "" : "s"})
                   </span>
                   <span className="text-2xl font-black text-[#BF980D]">
                     {formatPrice(total)}
@@ -206,9 +220,8 @@ export default function CartPage() {
                 </div>
 
                 <p className="mt-3 text-xs leading-5 text-zinc-500">
-                  Final pricing is confirmed with a sales advisor. The
-                  reservation fee secures your vehicle pending inspection and
-                  paperwork.
+                  Final pricing is confirmed with a sales advisor. A 20%
+                  downpayment is paid at checkout to secure your vehicle.
                 </p>
 
                 <Link

@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Check, Loader2, Trash2, UploadCloud, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Loader2,
+  Play,
+  Trash2,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import {
   addVehicleMedia,
   createVehicle,
@@ -46,6 +54,175 @@ function Field({
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Thumbnail for one gallery item in the admin drawer.
+ * - image            -> <img>
+ * - video + poster   -> <img> of the poster, with a play badge
+ * - video, no poster -> <video> (shows the first frame), with a play badge
+ *   (an .mp4 can't be used as an <img src>, which is why videos looked empty)
+ */
+function GalleryTile({
+  media,
+  baseUrl,
+  onDelete,
+}: {
+  media: GalleryMediaItem;
+  baseUrl: string;
+  onDelete: () => void;
+}) {
+  const isVideo = media.type === "video";
+  const src = resolveMediaUrl(media.src, baseUrl);
+  const poster = media.poster ? resolveMediaUrl(media.poster, baseUrl) : "";
+
+  return (
+    <div className="group relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-[#171c28]">
+      {!isVideo || poster ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={isVideo ? poster : src}
+          alt={media.alt ?? ""}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <video
+          // #t=0.1 makes the browser paint a frame instead of a black box
+          src={`${src}#t=0.1`}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+        />
+      )}
+
+      {isVideo && (
+        <>
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">
+            <Play size={18} className="fill-white text-white" />
+          </span>
+          <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+            Video
+          </span>
+        </>
+      )}
+
+      <button
+        type="button"
+        onClick={onDelete}
+        className="absolute right-1 top-1 hidden rounded-full bg-black/70 p-1 text-white group-hover:block"
+        aria-label="Remove"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Themed confirmation dialog — replaces the browser's native confirm().
+ * Sits above the drawer (z-[60]) and blocks interaction with it while open.
+ * Clicking the backdrop or Cancel closes it (disabled while a delete is
+ * in flight so it can't be dismissed mid-request).
+ */
+function ConfirmDeleteDialog({
+  media,
+  baseUrl,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  media: GalleryMediaItem;
+  baseUrl: string;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isVideo = media.type === "video";
+  const src = resolveMediaUrl(media.src, baseUrl);
+  const poster = media.poster ? resolveMediaUrl(media.poster, baseUrl) : "";
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={() => {
+        if (!deleting) onCancel();
+      }}
+      role="presentation"
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-delete-title"
+        aria-describedby="confirm-delete-desc"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#1a2332] shadow-2xl"
+      >
+        <div className="px-6 pt-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/15">
+              <AlertTriangle size={20} className="text-red-400" />
+            </div>
+            <div>
+              <h3
+                id="confirm-delete-title"
+                className="text-base font-bold text-white"
+              >
+                Remove {isVideo ? "video" : "photo"}?
+              </h3>
+              <p
+                id="confirm-delete-desc"
+                className="mt-1 text-sm text-slate-400"
+              >
+                This will permanently remove it from the gallery. This can’t be
+                undone.
+              </p>
+            </div>
+          </div>
+
+          {/* Preview of what's being deleted */}
+          <div className="mt-4 aspect-video w-full overflow-hidden rounded-lg border border-white/10 bg-[#171c28]">
+            {!isVideo || poster ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={isVideo ? poster : src}
+                alt={media.alt ?? ""}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <video
+                src={`${src}#t=0.1`}
+                muted
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-cover"
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-full px-4 py-2 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex items-center gap-2 rounded-full bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            {deleting && <Loader2 size={15} className="animate-spin" />}
+            {deleting ? "Removing..." : "Yes, remove"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -118,6 +295,13 @@ export default function VehicleFormDrawer({
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Delete-confirmation dialog state: which media is pending removal (null =
+  // dialog closed) and whether the delete request is currently in flight.
+  const [mediaToDelete, setMediaToDelete] = useState<GalleryMediaItem | null>(
+    null,
+  );
+  const [deletingMedia, setDeletingMedia] = useState(false);
 
   const isEditing = Boolean(savedVehicle);
   const isLastStep = step === STEPS.length;
@@ -202,15 +386,27 @@ export default function VehicleFormDrawer({
     }
   }
 
-  async function handleDeleteMedia(media: GalleryMediaItem) {
+  // Step 1 of deleting: just open the confirmation dialog.
+  function requestDeleteMedia(media: GalleryMediaItem) {
     if (!savedVehicle || !media.id) return;
-    if (!confirm("Remove this media item?")) return;
+    setMediaToDelete(media);
+  }
 
+  // Step 2: user confirmed in the dialog — actually delete.
+  async function confirmDeleteMedia() {
+    if (!savedVehicle || !mediaToDelete?.id) return;
+
+    const target = mediaToDelete;
+    setDeletingMedia(true);
     try {
-      await deleteVehicleMedia(savedVehicle.id, media.id);
-      setGallery((prev) => prev.filter((m) => m.id !== media.id));
+      await deleteVehicleMedia(savedVehicle.id, target.id!);
+      setGallery((prev) => prev.filter((m) => m.id !== target.id));
+      setMediaToDelete(null);
     } catch (err) {
       setError((err as ApiError).message || "Failed to remove media.");
+      setMediaToDelete(null);
+    } finally {
+      setDeletingMedia(false);
     }
   }
 
@@ -576,28 +772,12 @@ export default function VehicleFormDrawer({
 
                   <div className="grid grid-cols-4 gap-2">
                     {gallery.map((m) => (
-                      <div
+                      <GalleryTile
                         key={m.id ?? m.src}
-                        className="group relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-[#171c28]"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={resolveMediaUrl(
-                            m.type === "image" ? m.src : (m.poster ?? m.src),
-                            imageBaseUrl,
-                          )}
-                          alt={m.alt ?? ""}
-                          className="h-full w-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMedia(m)}
-                          className="absolute right-1 top-1 hidden rounded-full bg-black/70 p-1 text-white group-hover:block"
-                          aria-label="Remove"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                        media={m}
+                        baseUrl={imageBaseUrl}
+                        onDelete={() => requestDeleteMedia(m)}
+                      />
                     ))}
                   </div>
                 </div>
@@ -630,6 +810,17 @@ export default function VehicleFormDrawer({
           </div>
         </form>
       </div>
+
+      {/* Delete confirmation dialog (replaces native confirm()) */}
+      {mediaToDelete && (
+        <ConfirmDeleteDialog
+          media={mediaToDelete}
+          baseUrl={imageBaseUrl}
+          deleting={deletingMedia}
+          onCancel={() => setMediaToDelete(null)}
+          onConfirm={confirmDeleteMedia}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Bot, MessageCircle, Send, User, X } from "lucide-react";
 
 const focusRing =
@@ -24,12 +25,15 @@ function getBotReply(message: string): string {
   if (text.includes("sell") || text.includes("trade")) {
     return "Great — head to our Sell / Trade page and submit your car's details. Our team will send you a valuation within 24 hours.";
   }
+
   if (text.includes("financ")) {
     return "We work with several lenders and offer flexible terms. Want me to have a finance specialist call you?";
   }
+
   if (text.includes("test drive") || text.includes("book")) {
     return 'Happy to help! Pick a car from our Showroom and tap "Book Test Drive" on its page, or share the model here and I\'ll pass it along.';
   }
+
   if (text.includes("hour") || text.includes("open")) {
     return "We're open Mon–Sat, 9am–7pm. Feel free to drop by or reach us anytime here.";
   }
@@ -38,10 +42,13 @@ function getBotReply(message: string): string {
 }
 
 export default function ChatWidget() {
+  const pathname = usePathname();
+
   const [isOpen, setIsOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [input, setInput] = useState("");
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -66,6 +73,7 @@ export default function ChatWidget() {
 
   const sendMessage = (text: string) => {
     const trimmed = text.trim();
+
     if (!trimmed) return;
 
     const userMessage: ChatMessage = {
@@ -88,6 +96,7 @@ export default function ChatWidget() {
             text: getBotReply(trimmed),
           },
         ]);
+
         setIsTyping(false);
       },
       700 + Math.random() * 500,
@@ -98,6 +107,11 @@ export default function ChatWidget() {
     event.preventDefault();
     sendMessage(input);
   };
+
+  // Hide chatbot on all admin pages
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
@@ -110,10 +124,12 @@ export default function ChatWidget() {
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#BF980D] text-black">
                 <Bot size={18} strokeWidth={2.25} />
               </div>
+
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-white">
                   AutoTrade Assistant
                 </div>
+
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   Online now
@@ -139,7 +155,9 @@ export default function ChatWidget() {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex items-end gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex items-end gap-2 ${
+                  message.role === "user" ? "justify-end" : "justify-start"
+                }`}
               >
                 {message.role === "bot" && (
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#BF980D]/15 text-[#F3D77A]">
@@ -165,11 +183,13 @@ export default function ChatWidget() {
               </div>
             ))}
 
+            {/* Typing indicator */}
             {isTyping && (
               <div className="flex items-end gap-2">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#BF980D]/15 text-[#F3D77A]">
                   <Bot size={14} />
                 </div>
+
                 <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm bg-white/[0.06] px-4 py-3">
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.3s]" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]" />
@@ -178,7 +198,7 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* Quick replies — only before the conversation gets going */}
+            {/* Quick replies */}
             {messages.length === 1 && !isTyping && (
               <div className="flex flex-wrap gap-2 pt-1">
                 {QUICK_REPLIES.map((reply) => (
@@ -208,6 +228,7 @@ export default function ChatWidget() {
               aria-label="Type your message"
               className={`flex-1 rounded-full border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 ${focusRing}`}
             />
+
             <button
               type="submit"
               aria-label="Send message"

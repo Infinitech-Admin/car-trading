@@ -1,18 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  ArrowRight,
-  CarFront,
-  Download,
-  Menu,
-  Phone,
-  ShoppingCart,
-  X,
-} from "lucide-react";
+import { ArrowRight, Download, Menu, ShoppingCart, X } from "lucide-react";
 import { useCart } from "@/context/cart-context";
+import UserMenu from "@/components/layout/user-menu";
 
 const navigation = [
   { name: "Home", href: "/" },
@@ -154,21 +148,17 @@ export default function Navbar() {
             {/* LOGO */}
             <Link
               href="/"
-              className={`group flex items-center gap-2.5 sm:gap-3 ${focusRing}`}
+              aria-label="AutoTrade home"
+              className={`group flex items-center ${focusRing}`}
             >
-              <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-[#BF980D] text-black shadow-[0_10px_30px_rgba(191,152,13,0.22)] transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_12px_35px_rgba(191,152,13,0.35)]">
-                <CarFront size={21} strokeWidth={2.5} />
-              </div>
-
-              <div className="leading-none">
-                <div className="text-base font-black tracking-tight text-white sm:text-lg">
-                  Auto<span className="text-zinc-400">Trade</span>
-                </div>
-
-                <div className="mt-1 text-[8px] font-medium uppercase tracking-[0.25em] text-[#BF980D] sm:text-[9px]">
-                  Automotive
-                </div>
-              </div>
+              <Image
+                src="/logo.png"
+                alt="AutoTrade Automotive"
+                width={160}
+                height={48}
+                priority
+                className="h-9 w-auto object-contain transition-transform duration-300 group-hover:scale-105 sm:h-10 lg:h-11"
+              />
             </Link>
 
             {/* DESKTOP NAVIGATION */}
@@ -193,7 +183,7 @@ export default function Navbar() {
               })}
             </div>
 
-            {/* RIGHT SIDE: INSTALL + CART + MOBILE MENU */}
+            {/* RIGHT SIDE: INSTALL + CART + ACCOUNT + MOBILE MENU */}
             <div className="ml-auto flex items-center gap-2">
               {/* Install App */}
               {canInstall && (
@@ -220,6 +210,9 @@ export default function Navbar() {
                   </span>
                 )}
               </Link>
+
+              {/* Account: avatar + "My orders" (or Login when logged out) */}
+              <UserMenu />
 
               {/* Mobile / Tablet Menu */}
               <button
@@ -261,21 +254,20 @@ export default function Navbar() {
         >
           {/* Drawer Header */}
           <div className="flex h-[72px] items-center justify-between border-b border-white/10 px-5 sm:h-[76px] sm:px-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#BF980D] text-black">
-                <CarFront size={19} strokeWidth={2.5} />
-              </div>
-
-              <div className="leading-none">
-                <div className="text-base font-black text-white">
-                  Auto<span className="text-zinc-400">Trade</span>
-                </div>
-
-                <div className="mt-1 text-[8px] uppercase tracking-[0.25em] text-[#BF980D]">
-                  Automotive
-                </div>
-              </div>
-            </div>
+            <Link
+              href="/"
+              aria-label="AutoTrade home"
+              onClick={() => setIsMenuOpen(false)}
+              className={focusRing}
+            >
+              <Image
+                src="/logo.png"
+                alt="AutoTrade Automotive"
+                width={140}
+                height={40}
+                className="h-9 w-auto object-contain"
+              />
+            </Link>
 
             <button
               type="button"

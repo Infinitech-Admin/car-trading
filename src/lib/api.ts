@@ -10,9 +10,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // actual endpoint call below goes through this base instead of API_URL.
 const API_BASE = `${API_URL}/api`;
 
+/**
+ * Origin that vehicle media paths (e.g. "/storage/vehicles/images/x.jpg")
+ * are resolved against. Defaults to the API host. Safe to use in client
+ * components because it comes from a NEXT_PUBLIC_ variable.
+ */
+export const MEDIA_BASE_URL = process.env.NEXT_PUBLIC_MEDIA_URL || API_URL;
+
 export interface ApiError extends Error {
   status?: number;
   errors?: Record<string, string[]> | null;
+}
+
+/** True when a request was cancelled via AbortController. */
+export function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { name?: string }).name === "AbortError"
+  );
 }
 
 /**
@@ -148,8 +164,21 @@ export interface ResendVerificationResponse {
   [key: string]: unknown;
 }
 
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+}
+
+export interface LoginResponse {
+  user?: AuthUser;
+  [key: string]: unknown;
+}
+
 export const login = (payload: LoginPayload) =>
-  apiRequest("/login", { method: "POST", body: payload });
+  apiRequest<LoginResponse>("/login", { method: "POST", body: payload });
 
 export const register = (payload: RegisterPayload) =>
   apiRequest<RegisterResponse>("/register", { method: "POST", body: payload });
@@ -165,21 +194,14 @@ export const resendVerification = (payload: ResendVerificationPayload) =>
 
 export const logout = () => apiRequest("/logout", { method: "POST" });
 
-export interface AuthUser {
-  id: number;
-  name: string;
-  email: string;
-  phone: string | null;
-  role: string;
-}
-
 export interface MeResponse {
   user: AuthUser;
 }
 
 export const fetchMe = (options?: { signal?: AbortSignal }) =>
   apiRequest<MeResponse>("/me", { method: "GET", signal: options?.signal });
-// ---- Vehicles (admin CRUD) ----
+
+// ---- Vehicles ----
 
 export interface GalleryMediaItem {
   id?: number;
@@ -232,6 +254,22 @@ export interface VehiclePayload {
   status: "available" | "reserved" | "sold";
   image_path?: string | null;
 }
+
+// ---- Vehicles (public, used by the storefront) ----
+// Adjust these two paths if your routes/api.php uses different ones.
+
+export const fetchVehicles = (options?: { signal?: AbortSignal }) =>
+  apiRequest<{ data: Vehicle[] }>("/vehicles", { signal: options?.signal });
+
+export const fetchVehicle = (
+  id: string | number,
+  options?: { signal?: AbortSignal },
+) =>
+  apiRequest<{ data: Vehicle }>(`/vehicles/${id}`, {
+    signal: options?.signal,
+  });
+
+// ---- Vehicles (admin CRUD) ----
 
 export const fetchAdminVehicles = (params?: {
   search?: string;
@@ -371,3 +409,71 @@ export async function uploadFileInChunks(
     completeForm,
   );
 }
+
+// ---- Orders ----
+
+export interface PlaceOrderResponse {
+  data: {
+    order_number: string;
+    subtotal: number;
+    downpayment: number;
+    balance: number;
+    status: string;
+  };
+}
+
+/**
+ * Places an order with the payment screenshot (multipart). Works for guests
+ * and logged-in users — the session cookie is sent either way.
+ * Field names are dictated by OrderController@store on the Laravel side.
+ */
+export const placeOrder = (formData: FormData) =>
+  apiUpload<PlaceOrderResponse>("/orders", formData);
+
+// ---- Orders (admin) ----
+
+export interface OrderItem {
+  id?: number;
+  vehicle_id: number;
+  name?: string | null;
+  quantity: number;
+  price?: number | null;
+}
+
+export interface Order {
+  id: number;
+  order_number: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  address: string;
+  notes: string | null;
+  payment_method: string;
+  payment_reference: string | null;
+  payment_proof: string | null; // path relative to the API origin
+  subtotal: number;
+  downpayment: number;
+  balance: number;
+  status: string;
+  items?: OrderItem[];
+  created_at: string;
+  updated_at?: string;
+}
+
+/** Adjust the path if your routes/api.php uses a different one. */
+export const fetchAdminOrders = (options?: { signal?: AbortSignal }) =>
+  apiRequest<{ data: Order[] }>("/admin/orders", { signal: options?.signal });
+
+export const ORDER_STATUSES = [
+  "pending_verification",
+  "confirmed",
+  "ready_for_pick_up",
+  "completed",
+  "cancelled",
+] as const;
+
+export const updateAdminOrderStatus = (id: number, status: string) =>
+  apiRequest<{ data: Order }>(`/admin/orders/${id}/status`, {
+    method: "PATCH",
+    body: { status },
+  });
