@@ -1,21 +1,24 @@
 // lib/api.ts
 
-// Root host — used as-is for Sanctum's CSRF cookie route, which Laravel
-// registers unprefixed (it's set up by the Sanctum service provider, not
-// routes/api.php).
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// Everything in routes/api.php is auto-prefixed with "api" by Laravel
-// (see `php artisan route:list` — e.g. POST api/register), so every
-// actual endpoint call below goes through this base instead of API_URL.
-const API_BASE = `${API_URL}/api`;
+// All requests go to our own Next.js origin, through the Route Handler at
+// app/api/proxy/[...path]/route.ts. That handler forwards them to Laravel
+// (using the server-only LARAVEL_API_URL env var), so the browser only ever
+// talks to one origin and CORS never comes into play.
+//
+//   /api/proxy/login                -> {LARAVEL_API_URL}/api/login
+//   /api/proxy/sanctum/csrf-cookie  -> {LARAVEL_API_URL}/sanctum/csrf-cookie
+const API_BASE = "/api/proxy";
 
 /**
  * Origin that vehicle media paths (e.g. "/storage/vehicles/images/x.jpg")
- * are resolved against. Defaults to the API host. Safe to use in client
- * components because it comes from a NEXT_PUBLIC_ variable.
+ * are resolved against. <img>/<video> tags aren't subject to CORS, so media
+ * still loads straight from Laravel. Safe to use in client components
+ * because it comes from a NEXT_PUBLIC_ variable.
  */
-export const MEDIA_BASE_URL = process.env.NEXT_PUBLIC_MEDIA_URL || API_URL;
+export const MEDIA_BASE_URL =
+  process.env.NEXT_PUBLIC_MEDIA_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
 
 export interface ApiError extends Error {
   status?: number;
@@ -67,7 +70,7 @@ export function resolveMediaUrl(
 }
 
 async function ensureCsrfCookie(): Promise<void> {
-  await fetch(`${API_URL}/sanctum/csrf-cookie`, {
+  await fetch(`${API_BASE}/sanctum/csrf-cookie`, {
     credentials: "include",
   });
 }
@@ -322,7 +325,9 @@ export const deleteVehicleMedia = (vehicleId: number, mediaId: number) =>
 
 // ---- Chunked uploads (safe for 500MB+ video files) ----
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+// 4MB per chunk: uploads now pass through a Next.js Route Handler, and hosts
+// like Vercel reject request bodies over ~4.5MB.
+const CHUNK_SIZE = 4 * 1024 * 1024;
 
 async function apiUpload<T = unknown>(
   path: string,
