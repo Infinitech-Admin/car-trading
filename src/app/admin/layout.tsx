@@ -7,16 +7,17 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  CarFront,
   Car,
+  ClipboardList,
   LayoutDashboard,
   Loader2,
   LogOut,
+  Mail,
   Menu,
   Search,
   Settings,
-  ShoppingCart,
   Users,
-  Warehouse,
   X,
 } from "lucide-react";
 import { fetchMe, logout, type AuthUser } from "@/lib/api";
@@ -40,9 +41,10 @@ function getInitials(name?: string | null): string {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Showroom", href: "/admin/showroom", icon: Warehouse },
-  { label: "Orders", href: "/admin/orders", icon: ShoppingCart },
+  { label: "Showroom", href: "/admin/showroom", icon: CarFront },
+  { label: "Orders", href: "/admin/orders", icon: ClipboardList },
   { label: "Customers", href: "/admin/customers", icon: Users, soon: true },
+  { label: "Contact", href: "/admin/contact", icon: Mail },
   { label: "Settings", href: "/admin/settings", icon: Settings, soon: true },
 ];
 
