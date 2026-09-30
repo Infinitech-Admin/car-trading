@@ -7,18 +7,19 @@ import {
   ArrowRight,
   Gauge,
   MapPin,
-  Pause,
   Play,
   RotateCcw,
   Settings2,
   Sparkles,
   Star,
+  Video,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
+import TestDriveDialog from "@/components/test-drive-dialog";
 import { useCart } from "@/context/cart-context";
 import {
   MEDIA_BASE_URL,
@@ -30,14 +31,18 @@ import {
 } from "@/lib/api";
 
 type Slide = {
-  type: "image" | "video";
+  src: string;
+  alt: string;
+  /** The vehicle's main/cover photo (shown "contained" instead of cropped). */
+  isCover?: boolean;
+};
+
+type VideoItem = {
   src: string;
   alt: string;
   poster?: string;
   length?: "short" | "long";
   duration?: string;
-  /** The vehicle's main/cover photo (shown "contained" instead of cropped). */
-  isCover?: boolean;
 };
 
 /** Ilagay ang logo.png sa /public/logo.png */
@@ -46,20 +51,21 @@ const LOGO_SRC = "/logo.png";
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#BF980D]";
 
+/* -------------------------------------------------------------------------- */
+/*  IMAGE GALLERY (images only)                                               */
+/* -------------------------------------------------------------------------- */
+
 function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
   const [index, setIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   const pointerStartX = useRef<number | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const thumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
 
   const last = slides.length - 1;
   const safeIndex = Math.min(index, last);
-  const activeSlide = slides[safeIndex];
 
   const goNext = () =>
     setIndex((current) => (current >= last ? 0 : current + 1));
@@ -124,45 +130,12 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
     setIsDragging(false);
   };
 
-  const togglePlayback = () => {
-    const video = videoRefs.current[safeIndex];
-    if (!video) return;
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
-  };
-
   useEffect(() => {
-    const activeThumb = thumbRefs.current[safeIndex];
-    if (activeThumb)
-      activeThumb.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "center",
-      });
-
-    slides.forEach((slide, i) => {
-      const video = videoRefs.current[i];
-      if (!video || slide.type !== "video") return;
-
-      if (i !== safeIndex) {
-        video.pause();
-        video.currentTime = 0;
-        return;
-      }
-
-      if (slide.length === "short") {
-        video.play().catch(() => {});
-        setIsPlaying(true);
-      } else {
-        setIsPlaying(false);
-      }
+    thumbRefs.current[safeIndex]?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safeIndex]);
 
   return (
@@ -171,7 +144,7 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
       <div
         role="region"
         aria-roledescription="carousel"
-        aria-label={`${carName} photos and videos`}
+        aria-label={`${carName} photos`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         className={`relative overflow-hidden rounded-[22px] bg-[#111111] ${focusRing}`}
@@ -206,39 +179,16 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
                   <div className="absolute inset-x-8 bottom-5 h-10 rounded-full bg-[#BF980D]/20 blur-3xl sm:inset-x-16" />
                 )}
 
-                {slide.type === "image" ? (
-                  <Image
-                    src={slide.src}
-                    alt={slide.alt}
-                    fill
-                    priority={i === 0}
-                    unoptimized
-                    sizes="(min-width: 1024px) 60vw, (min-width: 640px) 90vw, 100vw"
-                    draggable={false}
-                    className={`relative z-10 ${slide.isCover ? "object-contain p-4 sm:p-6" : "object-cover"}`}
-                  />
-                ) : (
-                  <video
-                    ref={(el) => {
-                      videoRefs.current[i] = el;
-                    }}
-                    src={slide.src}
-                    poster={slide.poster}
-                    muted
-                    loop={slide.length === "short"}
-                    playsInline
-                    controls={slide.length === "long"}
-                    preload="metadata"
-                    className="relative z-10 h-full w-full object-cover"
-                  />
-                )}
-
-                {slide.type === "video" && slide.duration && (
-                  <span className="pointer-events-none absolute left-3 top-3 z-20 rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur-md">
-                    {slide.length === "long" ? "Full walkthrough" : "Clip"} ·{" "}
-                    {slide.duration}
-                  </span>
-                )}
+                <Image
+                  src={slide.src}
+                  alt={slide.alt}
+                  fill
+                  priority={i === 0}
+                  unoptimized
+                  sizes="(min-width: 1024px) 60vw, (min-width: 640px) 90vw, 100vw"
+                  draggable={false}
+                  className={`relative z-10 ${slide.isCover ? "object-contain p-4 sm:p-6" : "object-cover"}`}
+                />
               </div>
             ))}
           </div>
@@ -250,7 +200,7 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
             <button
               type="button"
               onClick={goPrevious}
-              aria-label="Previous item"
+              aria-label="Previous photo"
               className={`absolute left-2 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white backdrop-blur-xl transition-all duration-300 hover:border-[#BF980D] hover:bg-[#BF980D] hover:text-black active:scale-95 sm:left-4 sm:h-11 sm:w-11 ${focusRing}`}
             >
               <ArrowLeft size={18} />
@@ -260,24 +210,12 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
             <button
               type="button"
               onClick={goNext}
-              aria-label="Next item"
+              aria-label="Next photo"
               className={`absolute right-2 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white backdrop-blur-xl transition-all duration-300 hover:border-[#BF980D] hover:bg-[#BF980D] hover:text-black active:scale-95 sm:right-4 sm:h-11 sm:w-11 ${focusRing}`}
             >
               <ArrowRight size={18} />
             </button>
           </>
-        )}
-
-        {/* PLAY/PAUSE (long video only — short clips autoplay/loop silently) */}
-        {activeSlide.type === "video" && activeSlide.length === "long" && (
-          <button
-            type="button"
-            onClick={togglePlayback}
-            aria-label={isPlaying ? "Pause video" : "Play video"}
-            className={`absolute bottom-3 left-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white backdrop-blur-xl transition-all duration-300 hover:border-[#BF980D] hover:bg-[#BF980D] hover:text-black active:scale-95 sm:bottom-4 sm:left-4 ${focusRing}`}
-          >
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </button>
         )}
 
         {/* COUNTER */}
@@ -301,7 +239,6 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
         >
           {slides.map((slide, i) => {
             const isActive = i === safeIndex;
-            const hasPoster = slide.type === "video" && !!slide.poster;
 
             return (
               <button
@@ -311,62 +248,20 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
                 }}
                 type="button"
                 onClick={() => setIndex(i)}
-                aria-label={`Show item ${i + 1}`}
+                aria-label={`Show photo ${i + 1}`}
                 aria-current={isActive}
                 className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border bg-[#111111] transition-all duration-300 sm:h-20 sm:w-28 ${isActive ? "border-[#BF980D] opacity-100 ring-1 ring-[#BF980D]/30" : "border-white/10 opacity-50 hover:border-white/20 hover:opacity-100"} ${focusRing}`}
               >
-                {slide.type === "image" && (
-                  <Image
-                    src={slide.src}
-                    alt=""
-                    fill
-                    unoptimized
-                    sizes="112px"
-                    className={
-                      slide.isCover ? "object-contain p-1" : "object-cover"
-                    }
-                  />
-                )}
-
-                {slide.type === "video" && (
-                  <>
-                    {/* Logo fallback (kita kung walang poster / hindi pa loaded ang video frame) */}
-                    <Image
-                      src={LOGO_SRC}
-                      alt=""
-                      fill
-                      unoptimized
-                      sizes="112px"
-                      className="object-contain p-3 opacity-70"
-                    />
-
-                    {/* Poster kung meron, kung wala, first frame ng video */}
-                    {hasPoster ? (
-                      <Image
-                        src={slide.poster!}
-                        alt=""
-                        fill
-                        unoptimized
-                        sizes="112px"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <video
-                        src={`${slide.src}#t=0.5`}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        tabIndex={-1}
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                      />
-                    )}
-
-                    <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
-                      <Play size={16} className="fill-white text-white" />
-                    </span>
-                  </>
-                )}
+                <Image
+                  src={slide.src}
+                  alt=""
+                  fill
+                  unoptimized
+                  sizes="112px"
+                  className={
+                    slide.isCover ? "object-contain p-1" : "object-cover"
+                  }
+                />
               </button>
             );
           })}
@@ -375,6 +270,132 @@ function CarGallery({ carName, slides }: { carName: string; slides: Slide[] }) {
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*  VIDEO SECTION (separate from the photo gallery)                           */
+/* -------------------------------------------------------------------------- */
+
+function VideoSection({
+  carName,
+  videos,
+}: {
+  carName: string;
+  videos: VideoItem[];
+}) {
+  const [index, setIndex] = useState(0);
+
+  const safeIndex = Math.min(index, videos.length - 1);
+  const active = videos[safeIndex];
+  const isLong = active.length === "long";
+
+  return (
+    <section
+      aria-label={`${carName} videos`}
+      className="rounded-[28px] border border-white/10 bg-[#0f0d0a] p-3 shadow-[0_30px_90px_rgba(0,0,0,0.45)] sm:p-5 lg:p-6"
+    >
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between gap-3 px-1 sm:mb-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#BF980D]/10">
+            <Video className="text-[#BF980D]" size={18} />
+          </div>
+          <h2 className="text-xl font-bold text-white">Videos</h2>
+        </div>
+
+        <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white">
+          {videos.length} {videos.length === 1 ? "video" : "videos"}
+        </span>
+      </div>
+
+      {/* Player */}
+      <div className="relative overflow-hidden rounded-[22px] bg-[#111111]">
+        <div className="relative aspect-video w-full">
+          {/* key forces a fresh <video> whenever the selection changes */}
+          <video
+            key={active.src}
+            src={active.src}
+            poster={active.poster}
+            muted
+            autoPlay={!isLong}
+            loop={!isLong}
+            controls={isLong}
+            playsInline
+            preload="metadata"
+            aria-label={active.alt}
+            className="h-full w-full bg-black object-cover"
+          />
+
+          {active.duration && (
+            <span className="pointer-events-none absolute left-3 top-3 z-20 rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur-md">
+              {isLong ? "Full walkthrough" : "Clip"} · {active.duration}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Video list */}
+      {videos.length > 1 && (
+        <div className="relative mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-4 sm:gap-3">
+          {videos.map((video, i) => {
+            const isActive = i === safeIndex;
+            const hasPoster = !!video.poster;
+
+            return (
+              <button
+                key={`${i}-${video.src}`}
+                type="button"
+                onClick={() => setIndex(i)}
+                aria-label={`Play video ${i + 1}`}
+                aria-current={isActive}
+                className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border bg-[#111111] transition-all duration-300 sm:h-20 sm:w-28 ${isActive ? "border-[#BF980D] opacity-100 ring-1 ring-[#BF980D]/30" : "border-white/10 opacity-50 hover:border-white/20 hover:opacity-100"} ${focusRing}`}
+              >
+                {/* Logo fallback (kita kung walang poster / hindi pa loaded ang video frame) */}
+                <Image
+                  src={LOGO_SRC}
+                  alt=""
+                  fill
+                  unoptimized
+                  sizes="112px"
+                  className="object-contain p-3 opacity-70"
+                />
+
+                {/* Poster kung meron, kung wala, first frame ng video */}
+                {hasPoster ? (
+                  <Image
+                    src={video.poster!}
+                    alt=""
+                    fill
+                    unoptimized
+                    sizes="112px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <video
+                    src={`${video.src}#t=0.5`}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
+
+                <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+                  <Play size={16} className="fill-white text-white" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  PAGE                                                                      */
+/* -------------------------------------------------------------------------- */
 
 export default function CarDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -385,6 +406,7 @@ export default function CarDetailsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [testDriveOpen, setTestDriveOpen] = useState(false);
 
   const { addToCart } = useCart();
 
@@ -422,23 +444,20 @@ export default function CarDetailsPage() {
 
   const carImage = car ? resolveMediaUrl(car.image, MEDIA_BASE_URL) : "";
 
-  // Cover image first, then everything uploaded to the gallery.
+  // Cover image first, then every uploaded gallery IMAGE.
   const slides = useMemo<Slide[]>(() => {
     if (!car) return [];
 
-    const gallery: Slide[] = (car.galleryMedia ?? []).map((m) => ({
-      type: m.type,
-      src: resolveMediaUrl(m.src, MEDIA_BASE_URL),
-      poster: m.poster ? resolveMediaUrl(m.poster, MEDIA_BASE_URL) : undefined,
-      alt: m.alt || `${car.name} ${m.type}`,
-      length: m.length ?? undefined,
-      duration: m.duration ?? undefined,
-    }));
+    const gallery: Slide[] = (car.galleryMedia ?? [])
+      .filter((m) => m.type === "image")
+      .map((m) => ({
+        src: resolveMediaUrl(m.src, MEDIA_BASE_URL),
+        alt: m.alt || `${car.name} photo`,
+      }));
 
     return carImage
       ? [
           {
-            type: "image",
             src: carImage,
             alt: `${car.name} main view`,
             isCover: true,
@@ -447,6 +466,23 @@ export default function CarDetailsPage() {
         ]
       : gallery;
   }, [car, carImage]);
+
+  // Every uploaded gallery VIDEO goes to its own section.
+  const videos = useMemo<VideoItem[]>(() => {
+    if (!car) return [];
+
+    return (car.galleryMedia ?? [])
+      .filter((m) => m.type === "video")
+      .map((m) => ({
+        src: resolveMediaUrl(m.src, MEDIA_BASE_URL),
+        poster: m.poster
+          ? resolveMediaUrl(m.poster, MEDIA_BASE_URL)
+          : undefined,
+        alt: m.alt || `${car.name} video`,
+        length: m.length ?? undefined,
+        duration: m.duration ?? undefined,
+      }));
+  }, [car]);
 
   const unavailable = !car || car.status !== "available" || car.stock <= 0;
 
@@ -553,14 +589,24 @@ export default function CarDetailsPage() {
 
           {/* Vehicle Area */}
           <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.2fr_0.8fr] lg:gap-8 lg:items-start">
-            {/* Gallery */}
-            {slides.length > 0 ? (
-              <CarGallery key={car.id} carName={car.name} slides={slides} />
-            ) : (
-              <div className="flex h-[300px] items-center justify-center rounded-[28px] border border-white/10 bg-[#0f0d0a] text-sm text-zinc-500 sm:h-[420px] lg:h-[560px]">
-                No photos available yet
-              </div>
-            )}
+            {/* Media column: photos, then videos */}
+            <div className="min-w-0 space-y-6 lg:space-y-8">
+              {slides.length > 0 ? (
+                <CarGallery key={car.id} carName={car.name} slides={slides} />
+              ) : (
+                <div className="flex h-[300px] items-center justify-center rounded-[28px] border border-white/10 bg-[#0f0d0a] text-sm text-zinc-500 sm:h-[420px] lg:h-[560px]">
+                  No photos available yet
+                </div>
+              )}
+
+              {videos.length > 0 && (
+                <VideoSection
+                  key={`videos-${car.id}`}
+                  carName={car.name}
+                  videos={videos}
+                />
+              )}
+            </div>
 
             {/* Vehicle Info */}
             <aside className="rounded-[28px] border border-[#BF980D]/20 bg-[#120f0d] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:p-6 lg:sticky lg:top-24">
@@ -658,12 +704,14 @@ export default function CarDetailsPage() {
 
               {/* CTA */}
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                <Link
-                  href="/contact"
-                  className={`inline-flex items-center justify-center rounded-full bg-[#BF980D] px-5 py-3.5 text-sm font-bold text-black transition-all hover:bg-[#d8b53c] ${focusRing}`}
+                <button
+                  type="button"
+                  disabled={car.status === "sold"}
+                  onClick={() => setTestDriveOpen(true)}
+                  className={`inline-flex items-center justify-center rounded-full border border-[#BF980D]/60 bg-[#BF980D]/10 px-5 py-3.5 text-sm font-bold text-[#F3D77A] transition-all hover:bg-[#BF980D]/20 disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
                 >
                   Book a test drive
-                </Link>
+                </button>
 
                 <Link
                   href="/showroom"
@@ -675,6 +723,7 @@ export default function CarDetailsPage() {
             </aside>
           </div>
 
+          {/* Highlights */}
           <section className="mt-8 rounded-[28px] border border-white/10 bg-[#100e0c] p-5 sm:mt-12 sm:p-8">
             <div className="mb-5 flex items-center gap-3 sm:mb-6">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#BF980D]/10">
@@ -732,6 +781,12 @@ export default function CarDetailsPage() {
           </section>
         </div>
       </main>
+
+      <TestDriveDialog
+        open={testDriveOpen}
+        onClose={() => setTestDriveOpen(false)}
+        vehicle={{ id: car.id, name: car.name }}
+      />
 
       <Footer />
     </>

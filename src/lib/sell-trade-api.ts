@@ -1,3 +1,5 @@
+import { apiRequest } from "@/lib/api";
+
 export type SellTradeStatus = "new" | "contacted" | "closed";
 
 export type SellTradeRequest = {
@@ -24,30 +26,6 @@ export type SellTradePage = {
   total: number;
 };
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
-
-  const body = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const message =
-      res.status === 401
-        ? "Your session has expired. Please log in again."
-        : body?.message || "Something went wrong.";
-    throw Object.assign(new Error(message), { status: res.status });
-  }
-
-  return body as T;
-}
-
 export function fetchAdminSellTrades(params: {
   page?: number;
   perPage?: number;
@@ -61,25 +39,26 @@ export function fetchAdminSellTrades(params: {
   if (params.search) qs.set("search", params.search);
   if (params.status) qs.set("status", params.status);
 
-  return request<SellTradePage>(`/api/sell-trade?${qs.toString()}`);
+  // -> /api/proxy/sell-trade -> {LARAVEL_API_URL}/api/sell-trade
+  return apiRequest<SellTradePage>(`/sell-trade?${qs.toString()}`);
 }
 
 export async function updateSellTrade(
   id: number,
   payload: Partial<Pick<SellTradeRequest, "status" | "notes">>,
 ): Promise<SellTradeRequest> {
-  const res = await request<{ data: SellTradeRequest }>(
-    `/api/sell-trade/${id}`,
+  const res = await apiRequest<{ data: SellTradeRequest }>(
+    `/sell-trade/${id}`,
     {
       method: "PATCH",
-      body: JSON.stringify(payload),
+      body: payload,
     },
   );
   return res.data;
 }
 
 export function deleteSellTrade(id: number): Promise<{ message: string }> {
-  return request<{ message: string }>(`/api/sell-trade/${id}`, {
+  return apiRequest<{ message: string }>(`/sell-trade/${id}`, {
     method: "DELETE",
   });
 }

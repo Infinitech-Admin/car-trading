@@ -1,14 +1,14 @@
-// app/admin/layout.tsx
-
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowLeftRight,
   Bell,
-  CarFront,
+  CalendarCheck,
   Car,
+  CarFront,
   ClipboardList,
   LayoutDashboard,
   Loader2,
@@ -16,8 +16,6 @@ import {
   Mail,
   Menu,
   Search,
-  Settings,
-  Users,
   X,
 } from "lucide-react";
 import { fetchMe, logout, type AuthUser } from "@/lib/api";
@@ -31,30 +29,60 @@ interface NavItem {
 
 function getInitials(name?: string | null): string {
   if (!name) return "?";
+
   const parts = name.trim().split(/\s+/);
+
   const initials =
     parts.length === 1
       ? parts[0].slice(0, 2)
       : parts[0][0] + parts[parts.length - 1][0];
+
   return initials.toUpperCase();
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Showroom", href: "/admin/showroom", icon: CarFront },
-  { label: "Orders", href: "/admin/orders", icon: ClipboardList },
-  { label: "Customers", href: "/admin/customers", icon: Users, soon: true },
-  { label: "Contact", href: "/admin/contact", icon: Mail },
-  { label: "Settings", href: "/admin/settings", icon: Settings, soon: true },
+  {
+    label: "Dashboard",
+    href: "/admin",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "Showroom",
+    href: "/admin/showroom",
+    icon: CarFront,
+  },
+  {
+    label: "Orders",
+    href: "/admin/orders",
+    icon: ClipboardList,
+  },
+  {
+    label: "Sell-Trade",
+    href: "/admin/sell-trade",
+    icon: ArrowLeftRight,
+  },
+  {
+    label: "Contact",
+    href: "/admin/contact",
+    icon: Mail,
+  },
+  {
+    label: "Test-Drive",
+    href: "/admin/test-drive",
+    icon: CalendarCheck,
+  },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [authState, setAuthState] = useState<"checking" | "authenticated">(
     "checking",
   );
+
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
@@ -67,12 +95,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       })
       .catch((err) => {
         if (err?.name === "AbortError") return;
+
         router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
       });
 
     return () => {
       controller.abort();
     };
+
     // Re-check whenever the admin section is entered on a new path so a
     // session that expired mid-session still gets caught.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +143,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
+        {/* Logo */}
         <div className="flex h-16 items-center justify-between px-5">
           <Link
             href="/admin"
@@ -121,8 +152,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#BF980D]/15 text-[#d9ae1f]">
               <Car size={17} />
             </span>
-            Auto<span className="text-[#d9ae1f]">Trade</span>
+            Auto
+            <span className="text-[#d9ae1f]">Trade</span>
           </Link>
+
           <button
             onClick={() => setSidebarOpen(false)}
             className="text-slate-400 hover:text-white lg:hidden"
@@ -132,6 +165,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
@@ -148,6 +182,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     <Icon size={17} />
                     {item.label}
                   </span>
+
                   <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-slate-500">
                     Soon
                   </span>
@@ -173,6 +208,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
+        {/* Logout */}
         <div className="border-t border-white/10 p-3">
           <button
             onClick={handleLogout}
@@ -186,7 +222,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="lg:pl-64">
+        {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/10 bg-[#171c28]/90 px-4 backdrop-blur sm:px-6">
+          {/* Mobile menu */}
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-slate-300 hover:text-white lg:hidden"
@@ -195,11 +233,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Menu size={22} />
           </button>
 
-          <div className="relative hidden flex-1 max-w-sm sm:block">
+          {/* Search */}
+          <div className="relative hidden max-w-sm flex-1 sm:block">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
             />
+
             <input
               type="text"
               placeholder="Search vehicles, orders..."
@@ -207,23 +247,30 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             />
           </div>
 
+          {/* Header actions */}
           <div className="ml-auto flex items-center gap-3 sm:gap-4">
+            {/* Notifications */}
             <button
               className="relative text-slate-300 hover:text-white"
               aria-label="Notifications"
             >
               <Bell size={19} />
+
               <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#d9ae1f]" />
             </button>
+
+            {/* User */}
             <div className="flex items-center gap-2">
               <div className="hidden text-right sm:block">
                 <p className="text-xs font-semibold leading-tight text-white">
                   {user?.name ?? "..."}
                 </p>
+
                 <p className="text-[11px] capitalize leading-tight text-slate-400">
                   {user?.role ?? ""}
                 </p>
               </div>
+
               <div
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d9ae1f]/15 text-xs font-bold text-[#d9ae1f]"
                 title={user?.email}
@@ -234,6 +281,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        {/* Page content */}
         <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>

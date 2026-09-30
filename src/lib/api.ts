@@ -482,3 +482,161 @@ export const updateAdminOrderStatus = (id: number, status: string) =>
     method: "PATCH",
     body: { status },
   });
+// ---------------------------------------------------------------------------
+// ADD THIS TO THE BOTTOM OF  lib/api.ts
+// ---------------------------------------------------------------------------
+
+export interface DashboardStat {
+  value: number;
+  change: number | null;
+}
+
+export interface DashboardData {
+  stats: {
+    revenue: DashboardStat;
+    vehiclesSold: DashboardStat;
+    activeListings: DashboardStat;
+    newInquiries: DashboardStat;
+  };
+  revenue: { month: string; revenue: number; unitsSold: number }[];
+  categories: { name: string; value: number }[];
+  topModels: { model: string; unitsSold: number }[];
+  recent: {
+    id: string;
+    customer: string;
+    vehicle: string;
+    amount: number;
+    status: string;
+    date: string | null;
+  }[];
+  cart: {
+    added: number;
+    removed: number;
+    purchased: number;
+    removalRate: number;
+    inCartNow: number;
+    daily: { day: string; added: number; removed: number }[];
+    mostRemoved: { vehicle: string; added: number; removed: number }[];
+  };
+}
+
+/**
+ * GET /api/admin/dashboard?months=6
+ * Goes through apiRequest, so it uses the /api/proxy route, the httpOnly
+ * session cookie, and the ApiError shape like every other call.
+ */
+export const fetchAdminDashboard = (
+  months = 6,
+  options?: { signal?: AbortSignal },
+) =>
+  apiRequest<{ data: DashboardData }>(`/admin/dashboard?months=${months}`, {
+    signal: options?.signal,
+  }).then((res) => res.data);
+
+// ---------------------------------------------------------------------------
+// ADD THIS TO THE BOTTOM OF  lib/api.ts
+// ---------------------------------------------------------------------------
+
+// ---- Test drives ----
+
+export const TEST_DRIVE_STATUSES = [
+  "pending",
+  "confirmed",
+  "completed",
+  "cancelled",
+] as const;
+
+export type TestDriveStatus = (typeof TEST_DRIVE_STATUSES)[number];
+
+export interface TestDriveSlot {
+  time: string; // "HH:MM" (24h)
+  available: boolean;
+}
+
+export interface TestDrivePayload {
+  vehicle_id: number;
+  full_name: string;
+  email: string;
+  phone: string;
+  preferred_date: string; // YYYY-MM-DD
+  preferred_time: string; // one of the slot times
+  notes?: string;
+}
+
+export interface TestDriveBooking {
+  id: number;
+  vehicle_id: number | null;
+  vehicle_name: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  preferred_date: string;
+  preferred_time: string;
+  notes: string | null;
+  status: TestDriveStatus;
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTestDriveResponse {
+  message: string;
+  data: {
+    id: number;
+    reference: string;
+    vehicle: string;
+    preferred_date: string;
+    preferred_time: string;
+    status: TestDriveStatus;
+  };
+}
+
+/** Free/taken time slots for one car on one day (date = YYYY-MM-DD). */
+export const fetchTestDriveSlots = (
+  vehicleId: number,
+  date: string,
+  options?: { signal?: AbortSignal },
+) =>
+  apiRequest<{ data: TestDriveSlot[] }>(
+    `/vehicles/${vehicleId}/test-drive-slots?date=${encodeURIComponent(date)}`,
+    { signal: options?.signal },
+  );
+
+/** Works for guests and logged-in users. */
+export const createTestDrive = (payload: TestDrivePayload) =>
+  apiRequest<CreateTestDriveResponse>("/test-drives", {
+    method: "POST",
+    body: payload,
+  });
+
+// ---- Test drives (admin) ----
+
+export const fetchAdminTestDrives = (params?: {
+  status?: string;
+  search?: string;
+  page?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.page) query.set("page", String(params.page));
+  const qs = query.toString();
+  return apiRequest<{
+    data: TestDriveBooking[];
+    current_page: number;
+    last_page: number;
+    total: number;
+  }>(`/admin/test-drives${qs ? `?${qs}` : ""}`);
+};
+
+export const updateAdminTestDrive = (
+  id: number,
+  payload: { status?: TestDriveStatus; admin_notes?: string | null },
+) =>
+  apiRequest<{ data: TestDriveBooking }>(`/admin/test-drives/${id}`, {
+    method: "PATCH",
+    body: payload,
+  });
+
+export const deleteAdminTestDrive = (id: number) =>
+  apiRequest(`/admin/test-drives/${id}`, { method: "DELETE" });
