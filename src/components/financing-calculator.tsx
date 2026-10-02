@@ -4,22 +4,45 @@ import { useMemo, useState } from "react";
 import { Calculator, Download, FileText } from "lucide-react";
 
 /**
- * Internal rate used only for computing the monthly estimate.
- * Palitan ng rate ng partner bank/dealership.
+ * Interest rate (per year) for each loan term, used to compute the monthly
+ * estimate. Palitan ng rate ng partner bank/dealership. Pwedeng magkaiba ang
+ * rate kada term (usually mas mababa ang rate sa mas maikling term).
  * NOTE: Nasa client bundle ito, kaya makikita pa rin sa dev tools.
  * Kung confidential talaga, ilipat ang computation sa backend API.
  */
-const ANNUAL_RATE = 0.08;
+const TERM_RATES: Record<number, number> = {
+  1: 0.08,
+  2: 0.08,
+  3: 0.08,
+  4: 0.08,
+  5: 0.08,
+};
+
+/** Terms offered, in years. */
+const TERM_YEARS = [1, 2, 3, 4, 5] as const;
 
 /**
- * false (default): hindi ipapakita ang rate, total interest, at total payable.
- *                  Monthly estimate lang ang makikita ng customer.
- * true: ipapakita ang rate at ang interest breakdown (UI, PDF, Word).
+ * true (default): ipapakita ang interest rate (UI, PDF, Word).
+ * false: itatago ang rate; monthly estimate lang ang makikita.
+ */
+const SHOW_RATE = true;
+
+/**
+ * false (default): hindi ipapakita ang total interest at total payable
+ *                  sa screen.
+ * true: ipapakita rin sa screen.
  */
 const SHOW_INTEREST_BREAKDOWN = false;
 
+/**
+ * true (default): ang downloaded PDF/Word quotation ay DETAILED
+ *                 (monthly, total interest, total payable, at monthly
+ *                 per down payment 10/20/30%), kahit hidden sa screen.
+ * false: sumusunod ang PDF/Word sa SHOW_INTEREST_BREAKDOWN.
+ */
+const EXPORT_DETAILS = true;
+
 const DP_OPTIONS = [10, 20, 30] as const;
-const TERM_YEARS = [1, 2, 3] as const;
 
 const DISCLAIMER =
   "This is an estimate only and not a loan approval or binding offer. Final rates, fees and terms are subject to bank/dealer approval.";
@@ -30,6 +53,7 @@ const focusRing =
 type Plan = {
   years: number;
   months: number;
+  rate: number;
   monthly: number;
   totalInterest: number;
   totalPayable: number;
@@ -51,14 +75,19 @@ function monthlyPayment(principal: number, annualRate: number, months: number) {
 const fmt = (n: number, symbol = "₱") =>
   `${symbol}${Math.round(n).toLocaleString("en-PH")}`;
 
+/** 0.08 -> "8%", 0.0875 -> "8.75%" */
+const fmtRate = (rate: number) => `${parseFloat((rate * 100).toFixed(2))}%`;
+
 function buildPlans(financed: number): Plan[] {
   return TERM_YEARS.map((years) => {
     const months = years * 12;
-    const monthly = monthlyPayment(financed, ANNUAL_RATE, months);
+    const rate = TERM_RATES[years] ?? 0;
+    const monthly = monthlyPayment(financed, rate, months);
     const totalPayable = monthly * months;
     return {
       years,
       months,
+      rate,
       monthly,
       totalPayable,
       totalInterest: totalPayable - financed,
@@ -79,6 +108,13 @@ function download(blob: Blob, filename: string) {
 
 const termLabel = (p: Plan) =>
   `${p.years} year${p.years > 1 ? "s" : ""} (${p.months} mos)`;
+
+const todayLabel = () =>
+  new Date().toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
 export default function FinancingCalculator({
   carName,
@@ -101,10 +137,21 @@ export default function FinancingCalculator({
     return { downPayment, financed, plans: buildPlans(financed) };
   }, [total, dp]);
 
+  // For the quotation: monthly payment for EVERY down payment option.
+  const matrix = useMemo(
+    () =>
+      DP_OPTIONS.map((pct) => {
+        const amount = (total * pct) / 100;
+        return { pct, amount, plans: buildPlans(total - amount) };
+      }),
+    [total],
+  );
+
   if (total <= 0) return null;
 
   const safeName = carName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   const title = `${year ? `${year} ` : ""}${carName}`;
+  const detailed = EXPORT_DETAILS || SHOW_INTEREST_BREAKDOWN;
 
   /* ----------------------------- PDF ----------------------------- */
   const downloadPdf = async () => {
@@ -113,67 +160,152 @@ export default function FinancingCalculator({
     // Helvetica has no ₱ glyph, so use "PHP " in the PDF.
     const money = (n: number) => fmt(n, "PHP ");
 
+    const LEFT = 48;
+    const RIGHT = 547;
     let y = 56;
+
+    const ensureSpace = (needed: number) => {
+      if (y + needed > 790) {
+        doc.addPage();
+        y = 56;
+      }
+    };
+
+    const section = (label: string) => {
+      ensureSpace(48);
+      y += 10;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text(label, LEFT, y);
+      y += 8;
+      doc.setDrawColor(191, 152, 13);
+      doc.line(LEFT, y, RIGHT, y);
+      y += 18;
+      doc.setFontSize(10.5);
+    };
+
+    // --- Title
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("Financing Quotation", 48, y);
+    doc.setTextColor(0);
+    doc.text("Financing Quotation", LEFT, y);
 
-    y += 28;
+    y += 26;
     doc.setFontSize(14);
-    doc.text(title, 48, y);
+    doc.text(title, LEFT, y);
 
-    y += 24;
+    y += 18;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`Prepared on ${todayLabel()}`, LEFT, y);
+    doc.setTextColor(0);
+    y += 6;
 
+    // --- 1. Summary
+    section("Loan summary");
+    doc.setFont("helvetica", "normal");
     const summary: [string, string][] = [
       ["Vehicle price", money(total)],
       [`Down payment (${dp}%)`, money(downPayment)],
       ["Amount financed", money(financed)],
     ];
-    if (SHOW_INTEREST_BREAKDOWN) {
-      summary.push([
-        "Interest rate",
-        `${(ANNUAL_RATE * 100).toFixed(2)}% per year`,
-      ]);
-    }
     summary.forEach(([label, value]) => {
-      doc.text(label, 48, y);
-      doc.text(value, 547, y, { align: "right" });
+      doc.text(label, LEFT, y);
+      doc.text(value, RIGHT, y, { align: "right" });
       y += 18;
     });
 
-    y += 14;
+    // --- 2. Selected down payment: all terms
+    section(`Monthly payment · ${dp}% down payment`);
+
+    const cols = detailed
+      ? { term: LEFT, rate: 215, monthly: 330, interest: 440, payable: RIGHT }
+      : { term: LEFT, rate: 300, monthly: RIGHT, interest: 0, payable: 0 };
+
     doc.setFont("helvetica", "bold");
-    doc.text("Term", 48, y);
-    if (SHOW_INTEREST_BREAKDOWN) {
-      doc.text("Monthly", 200, y);
-      doc.text("Total interest", 340, y);
-      doc.text("Total payable", 547, y, { align: "right" });
-    } else {
-      doc.text("Estimated monthly", 547, y, { align: "right" });
+    doc.text("Term", cols.term, y);
+    if (SHOW_RATE) doc.text("Interest rate", cols.rate, y, { align: "right" });
+    doc.text("Monthly payment", cols.monthly, y, { align: "right" });
+    if (detailed) {
+      doc.text("Total interest", cols.interest, y, { align: "right" });
+      doc.text("Total payable", cols.payable, y, { align: "right" });
     }
     y += 6;
-    doc.line(48, y, 547, y);
-    y += 18;
+    doc.setDrawColor(0);
+    doc.line(LEFT, y, RIGHT, y);
+    y += 17;
 
     doc.setFont("helvetica", "normal");
     plans.forEach((p) => {
-      doc.text(termLabel(p), 48, y);
-      if (SHOW_INTEREST_BREAKDOWN) {
-        doc.text(money(p.monthly), 200, y);
-        doc.text(money(p.totalInterest), 340, y);
-        doc.text(money(p.totalPayable), 547, y, { align: "right" });
-      } else {
-        doc.text(money(p.monthly), 547, y, { align: "right" });
+      doc.text(termLabel(p), cols.term, y);
+      if (SHOW_RATE)
+        doc.text(`${fmtRate(p.rate)} / yr`, cols.rate, y, { align: "right" });
+      doc.setFont("helvetica", "bold");
+      doc.text(money(p.monthly), cols.monthly, y, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      if (detailed) {
+        doc.text(money(p.totalInterest), cols.interest, y, { align: "right" });
+        doc.text(money(p.totalPayable), cols.payable, y, { align: "right" });
       }
       y += 20;
     });
 
-    y += 20;
+    if (detailed) {
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(
+        `Total cost of ownership = down payment + total payable. Example (${plans[plans.length - 1].years} years): ${money(downPayment + plans[plans.length - 1].totalPayable)}.`,
+        LEFT,
+        y,
+      );
+      doc.setTextColor(0);
+      doc.setFontSize(10.5);
+      y += 10;
+    }
+
+    // --- 3. Compare all down payments
+    section("Monthly payment by down payment");
+
+    const mCols = [260, 405, RIGHT];
+    doc.setFont("helvetica", "bold");
+    doc.text("Term", LEFT, y);
+    matrix.forEach((m, i) => {
+      doc.text(`${m.pct}% down`, mCols[i], y, { align: "right" });
+    });
+    y += 12;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(120);
+    matrix.forEach((m, i) => {
+      doc.text(money(m.amount), mCols[i], y, { align: "right" });
+    });
+    doc.setTextColor(0);
+    doc.setFontSize(10.5);
+    y += 6;
+    doc.line(LEFT, y, RIGHT, y);
+    y += 17;
+
+    TERM_YEARS.forEach((years, row) => {
+      const label = matrix[0].plans[row];
+      doc.text(termLabel(label), LEFT, y);
+      matrix.forEach((m, i) => {
+        const isSelected = m.pct === dp;
+        doc.setFont("helvetica", isSelected ? "bold" : "normal");
+        doc.text(money(m.plans[row].monthly), mCols[i], y, { align: "right" });
+      });
+      doc.setFont("helvetica", "normal");
+      y += 20;
+      void years;
+    });
+
+    // --- Disclaimer
+    ensureSpace(60);
+    y += 16;
     doc.setFontSize(9);
     doc.setTextColor(120);
-    doc.text(doc.splitTextToSize(DISCLAIMER, 499), 48, y);
+    doc.text(doc.splitTextToSize(DISCLAIMER, RIGHT - LEFT), LEFT, y);
 
     doc.save(`financing-${safeName}-${dp}dp.pdf`);
   };
@@ -181,21 +313,35 @@ export default function FinancingCalculator({
   /* ---------------------------- WORD ----------------------------- */
   // HTML-based .doc: opens directly in Microsoft Word, no extra library needed.
   const downloadWord = () => {
-    const header = SHOW_INTEREST_BREAKDOWN
-      ? "<tr><th>Term</th><th>Monthly</th><th>Total interest</th><th>Total payable</th></tr>"
-      : "<tr><th>Term</th><th>Estimated monthly</th></tr>";
+    const rateTh = SHOW_RATE ? "<th>Interest rate</th>" : "";
+    const header = detailed
+      ? `<tr><th>Term</th>${rateTh}<th>Monthly payment</th><th>Total interest</th><th>Total payable</th></tr>`
+      : `<tr><th>Term</th>${rateTh}<th>Monthly payment</th></tr>`;
 
     const rows = plans
-      .map((p) =>
-        SHOW_INTEREST_BREAKDOWN
-          ? `<tr><td>${termLabel(p)}</td><td>${fmt(p.monthly)}</td><td>${fmt(p.totalInterest)}</td><td>${fmt(p.totalPayable)}</td></tr>`
-          : `<tr><td>${termLabel(p)}</td><td>${fmt(p.monthly)}</td></tr>`,
-      )
+      .map((p) => {
+        const rateCell = SHOW_RATE
+          ? `<td>${fmtRate(p.rate)} per year</td>`
+          : "";
+        return detailed
+          ? `<tr><td>${termLabel(p)}</td>${rateCell}<td><b>${fmt(p.monthly)}</b></td><td>${fmt(p.totalInterest)}</td><td>${fmt(p.totalPayable)}</td></tr>`
+          : `<tr><td>${termLabel(p)}</td>${rateCell}<td><b>${fmt(p.monthly)}</b></td></tr>`;
+      })
       .join("");
 
-    const rateRow = SHOW_INTEREST_BREAKDOWN
-      ? `<tr><td>Interest rate</td><td>${(ANNUAL_RATE * 100).toFixed(2)}% per year</td></tr>`
-      : "";
+    const matrixHeader = `<tr><th>Term</th>${matrix
+      .map((m) => `<th>${m.pct}% down<br/><small>${fmt(m.amount)}</small></th>`)
+      .join("")}</tr>`;
+
+    const matrixRows = TERM_YEARS.map((_, row) => {
+      const cells = matrix
+        .map((m) => {
+          const v = fmt(m.plans[row].monthly);
+          return `<td>${m.pct === dp ? `<b>${v}</b>` : v}</td>`;
+        })
+        .join("");
+      return `<tr><td>${termLabel(matrix[0].plans[row])}</td>${cells}</tr>`;
+    }).join("");
 
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>Financing Quotation</title>
@@ -203,24 +349,37 @@ export default function FinancingCalculator({
   body{font-family:Calibri,Arial,sans-serif;font-size:11pt}
   h1{font-size:20pt;margin-bottom:0}
   h2{font-size:14pt;margin-top:4pt}
-  table{border-collapse:collapse;width:100%;margin-top:12pt}
+  h3{font-size:12pt;margin-top:18pt;border-bottom:2px solid #BF980D}
+  table{border-collapse:collapse;width:100%;margin-top:8pt}
   th,td{border:1px solid #999;padding:6pt;text-align:left}
   th{background:#BF980D;color:#000}
+  .meta{color:#777;font-size:9pt}
   .note{color:#777;font-size:9pt;margin-top:16pt}
 </style></head>
 <body>
   <h1>Financing Quotation</h1>
   <h2>${title}</h2>
+  <p class="meta">Prepared on ${todayLabel()}</p>
+
+  <h3>Loan summary</h3>
   <table>
     <tr><td>Vehicle price</td><td>${fmt(total)}</td></tr>
     <tr><td>Down payment (${dp}%)</td><td>${fmt(downPayment)}</td></tr>
     <tr><td>Amount financed</td><td>${fmt(financed)}</td></tr>
-    ${rateRow}
   </table>
+
+  <h3>Monthly payment · ${dp}% down payment</h3>
   <table>
     ${header}
     ${rows}
   </table>
+
+  <h3>Monthly payment by down payment</h3>
+  <table>
+    ${matrixHeader}
+    ${matrixRows}
+  </table>
+
   <p class="note">${DISCLAIMER}</p>
 </body></html>`;
 
@@ -243,7 +402,7 @@ export default function FinancingCalculator({
         <h2 className="text-xl font-bold text-white">Financing</h2>
       </div>
 
-      {/* Down payment buttons */}
+      {/* Down payment buttons (10 / 20 / 30) */}
       <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
         Down payment
       </p>
@@ -272,8 +431,8 @@ export default function FinancingCalculator({
         })}
       </div>
 
-      {/* Summary: auto-fits 1 to 3 columns based on the card's own width */}
-      <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">
+      {/* Summary: one compact list, so it never wraps awkwardly */}
+      <dl className="mt-6 divide-y divide-white/10 rounded-2xl border border-white/10 bg-[#171410] text-sm">
         {[
           ["Vehicle price", fmt(total)],
           [`Down payment (${dp}%)`, fmt(downPayment)],
@@ -281,33 +440,46 @@ export default function FinancingCalculator({
         ].map(([label, value]) => (
           <div
             key={label}
-            className="min-w-0 rounded-2xl border border-white/10 bg-[#171410] p-4"
+            className="flex items-center justify-between gap-4 px-4 py-3"
           >
-            <p className="text-sm text-zinc-500">{label}</p>
-            <p className="mt-1 break-words text-lg font-bold text-white">
+            <dt className="text-zinc-500">{label}</dt>
+            <dd className="break-words text-right font-bold text-white">
               {value}
-            </p>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      {/* Term cards (1 / 2 / 3 years): auto-fit so they never overflow */}
-      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
+      {/* Terms: 1 to 5 years, one row each */}
+      <p className="mt-6 text-xs uppercase tracking-[0.2em] text-zinc-500">
+        Monthly payment by term
+      </p>
+      <ul className="mt-3 space-y-2">
         {plans.map((p) => (
-          <div
+          <li
             key={`${dp}-${p.years}`}
-            className="min-w-0 rounded-2xl border border-[#BF980D]/25 bg-[#171410] p-4 transition-colors hover:border-[#BF980D]/60 sm:p-5"
+            className="min-w-0 rounded-2xl border border-[#BF980D]/25 bg-[#171410] px-4 py-3 transition-colors hover:border-[#BF980D]/60"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#F3D77A]">
-              {p.years} year{p.years > 1 ? "s" : ""} · {p.months} months
-            </p>
-            <p className="mt-3 break-words text-2xl font-black leading-tight text-[#BF980D]">
-              {fmt(p.monthly)}
-            </p>
-            <p className="text-xs text-zinc-500">estimated per month</p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#F3D77A]">
+                  {p.years} year{p.years > 1 ? "s" : ""}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {p.months} months
+                  {SHOW_RATE && <> · {fmtRate(p.rate)} per year</>}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="break-words text-xl font-black leading-tight text-[#BF980D]">
+                  {fmt(p.monthly)}
+                </p>
+                <p className="text-xs text-zinc-500">per month</p>
+              </div>
+            </div>
 
             {SHOW_INTEREST_BREAKDOWN && (
-              <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3 text-sm">
+              <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="text-zinc-500">Total interest</span>
                   <span className="font-semibold text-white">
@@ -322,9 +494,9 @@ export default function FinancingCalculator({
                 </div>
               </div>
             )}
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {/* Downloads */}
       <div className="mt-6 flex flex-wrap gap-3">
