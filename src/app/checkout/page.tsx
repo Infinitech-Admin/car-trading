@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
@@ -18,7 +17,7 @@ import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
 import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
-import { fetchMe, isAbortError, placeOrder, type ApiError } from "@/lib/api";
+import { placeOrder, type ApiError } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // ADJUST: payment settings
@@ -26,9 +25,9 @@ import { fetchMe, isAbortError, placeOrder, type ApiError } from "@/lib/api";
 const DOWNPAYMENT_RATE = 0.2; // 20% — keep in sync with OrderController.php
 const MAX_PROOF_SIZE_MB = 5;
 
-// Where to send the user if they're not logged in, and where they come back to.
+// Optional: lets guests who already have an account log in and come back.
 const CHECKOUT_PATH = "/checkout"; // ADJUST if your route is different
-const LOGIN_REDIRECT_URL = `/login?redirect=${encodeURIComponent(CHECKOUT_PATH)}`;
+const LOGIN_URL = `/login?redirect=${encodeURIComponent(CHECKOUT_PATH)}`;
 
 type PaymentMethodId = "gcash" | "maya" | "bank";
 
@@ -108,14 +107,10 @@ const labelClasses =
   "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400";
 
 export default function CheckoutPage() {
-  const router = useRouter();
+  // `user` is optional now: logged-in users get their details prefilled,
+  // guests just fill in the form.
   const { user } = useAuth();
   const { items, clearCart, isHydrated } = useCart();
-
-  // Login guard: "checking" until /me confirms there's a session.
-  const [authStatus, setAuthStatus] = useState<"checking" | "authed">(
-    "checking",
-  );
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Partial<Record<ErrorKey, string>>>({});
@@ -124,6 +119,7 @@ export default function CheckoutPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [paidAmount, setPaidAmount] = useState(0);
+  const [submittedAsGuest, setSubmittedAsGuest] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>("gcash");
   const [proof, setProof] = useState<File | null>(null);
@@ -131,22 +127,8 @@ export default function CheckoutPage() {
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Require login before checkout; otherwise send them to /login and
-  // bring them back here afterwards. (The API must enforce this too.)
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetchMe({ signal: controller.signal })
-      .then(() => setAuthStatus("authed"))
-      .catch((err) => {
-        if (isAbortError(err)) return;
-        router.replace(LOGIN_REDIRECT_URL);
-      });
-
-    return () => controller.abort();
-  }, [router]);
-
-  // Prefill name/email for logged-in users (without overwriting what they typed).
+  // Prefill name/email/phone for logged-in users (without overwriting what
+  // they typed). Does nothing for guests.
   useEffect(() => {
     if (!user) return;
     setForm((current) => ({
@@ -271,21 +253,16 @@ export default function CheckoutPage() {
         data.append("payment_reference", form.reference.trim());
       data.append("payment_proof", proof);
 
-      // From lib/api.ts — sends the session cookie + CSRF header for us.
+      // From lib/api.ts — works for guests and logged-in users.
       const result = await placeOrder(data);
 
+      setSubmittedAsGuest(!user);
       setOrderNumber(result?.data?.order_number ?? "");
       setPaidAmount(Number(result?.data?.downpayment ?? downpayment));
       setIsSubmitted(true);
       clearCart();
     } catch (err) {
       const apiErr = err as ApiError;
-
-      // Session expired mid-checkout -> back to login (cart is kept).
-      if (apiErr?.status === 401) {
-        router.replace(LOGIN_REDIRECT_URL);
-        return;
-      }
 
       // Laravel 422 -> show messages under the matching fields.
       if (apiErr?.errors) {
@@ -331,6 +308,15 @@ export default function CheckoutPage() {
               contact you to confirm the next steps.
             </p>
 
+            {submittedAsGuest && (
+              <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-5 text-zinc-400">
+                Please save your order number
+                {orderNumber ? ` (${orderNumber})` : ""}. You&apos;ll need it,
+                along with the email you used, when contacting us about this
+                order.
+              </p>
+            )}
+
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href="/showroom"
@@ -352,9 +338,9 @@ export default function CheckoutPage() {
     );
   }
 
-  // Wait for the login check and the saved cart before showing anything,
-  // so we don't flash the form (or "Your cart is empty") to a guest.
-  if (authStatus !== "authed" || !isHydrated) {
+  // Wait for the saved cart before showing anything, so we don't flash
+  // "Your cart is empty".
+  if (!isHydrated) {
     return (
       <>
         <Navbar />
@@ -412,6 +398,18 @@ export default function CheckoutPage() {
           <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
             Checkout
           </h1>
+
+          {!user && (
+            <p className="mt-3 text-sm text-zinc-400">
+              Checking out as a guest. No account needed.{" "}
+              <Link
+                href={LOGIN_URL}
+                className="font-semibold text-[#BF980D] transition-colors hover:text-[#dbc15b]"
+              >
+                Already have an account? Log in
+              </Link>
+            </p>
+          )}
 
           <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-start">
             {/* Form */}

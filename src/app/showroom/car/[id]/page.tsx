@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
 import TestDriveDialog from "@/components/test-drive-dialog";
+import FinancingCalculator from "@/components/financing-calculator";
 import { useCart } from "@/context/cart-context";
 import {
   MEDIA_BASE_URL,
@@ -608,119 +609,130 @@ export default function CarDetailsPage() {
               )}
             </div>
 
-            {/* Vehicle Info */}
-            <aside className="rounded-[28px] border border-[#BF980D]/20 bg-[#120f0d] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:p-6 lg:sticky lg:top-24">
-              {/* Badge */}
-              <div className="mb-4 flex items-center justify-between gap-3">
-                {car.badge ? (
-                  <span className="rounded-full border border-[#BF980D]/40 bg-[#BF980D]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#F3D77A]">
-                    {car.badge}
-                  </span>
-                ) : (
-                  <span />
-                )}
+            {/* Right column: info card + financing */}
+            <div className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:space-y-8">
+              {/* Vehicle Info */}
+              <aside className="rounded-[28px] border border-[#BF980D]/20 bg-[#120f0d] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:p-6">
+                {/* Badge */}
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  {car.badge ? (
+                    <span className="rounded-full border border-[#BF980D]/40 bg-[#BF980D]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#F3D77A]">
+                      {car.badge}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
 
-                <span className="flex items-center gap-1 text-xs text-[#F3D77A] sm:text-sm">
-                  <Star size={14} fill="currentColor" />
-                  Featured
-                </span>
-              </div>
-
-              {/* Vehicle Type */}
-              <p className="text-xs uppercase tracking-[0.25em] text-zinc-500 sm:text-sm">
-                {car.year} • {car.type}
-              </p>
-
-              {/* Name */}
-              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                {car.name}
-              </h1>
-
-              {/* Price */}
-              <div className="mt-5 flex flex-wrap items-end gap-2 sm:mt-6 sm:gap-3">
-                <span className="text-3xl font-black text-[#BF980D] sm:text-4xl">
-                  {car.price}
-                </span>
-                <span className="pb-1 text-xs text-zinc-500 sm:text-sm">
-                  Starting price
-                </span>
-              </div>
-
-              {/* Specifications */}
-              <div className="mt-6 space-y-3 border-y border-white/10 py-5 text-sm sm:mt-7 sm:py-6 sm:text-base">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-zinc-500">Mileage</span>
-                  <span className="text-right font-semibold text-white">
-                    {car.mileage}
+                  <span className="flex items-center gap-1 text-xs text-[#F3D77A] sm:text-sm">
+                    <Star size={14} fill="currentColor" />
+                    Featured
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-zinc-500">Engine</span>
-                  <span className="text-right font-semibold text-white">
-                    {car.engine}
+                {/* Vehicle Type */}
+                <p className="text-xs uppercase tracking-[0.25em] text-zinc-500 sm:text-sm">
+                  {car.year} • {car.type}
+                </p>
+
+                {/* Name */}
+                <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                  {car.name}
+                </h1>
+
+                {/* Price */}
+                <div className="mt-5 flex flex-wrap items-end gap-2 sm:mt-6 sm:gap-3">
+                  <span className="text-3xl font-black text-[#BF980D] sm:text-4xl">
+                    {car.price}
+                  </span>
+                  <span className="pb-1 text-xs text-zinc-500 sm:text-sm">
+                    Starting price
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-zinc-500">Power</span>
-                  <span className="text-right font-semibold text-white">
-                    {car.horsepower}
-                  </span>
+                {/* Specifications */}
+                <div className="mt-6 space-y-3 border-y border-white/10 py-5 text-sm sm:mt-7 sm:py-6 sm:text-base">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-zinc-500">Mileage</span>
+                    <span className="text-right font-semibold text-white">
+                      {car.mileage}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-zinc-500">Engine</span>
+                    <span className="text-right font-semibold text-white">
+                      {car.engine}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-zinc-500">Power</span>
+                    <span className="text-right font-semibold text-white">
+                      {car.horsepower}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-zinc-500">Transmission</span>
+                    <span className="text-right font-semibold text-white">
+                      {car.transmission}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-zinc-500">Availability</span>
+                    <span
+                      className={`text-right font-semibold ${
+                        unavailable ? "text-red-400" : "text-emerald-400"
+                      }`}
+                    >
+                      {unavailable ? statusLabel : `${car.stock} in stock`}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-zinc-500">Transmission</span>
-                  <span className="text-right font-semibold text-white">
-                    {car.transmission}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-zinc-500">Availability</span>
-                  <span
-                    className={`text-right font-semibold ${
-                      unavailable ? "text-red-400" : "text-emerald-400"
-                    }`}
-                  >
-                    {unavailable ? statusLabel : `${car.stock} in stock`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Add to Cart */}
-              <button
-                type="button"
-                disabled={unavailable}
-                onClick={handleAddToCart}
-                className={`mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#BF980D] px-5 py-3.5 text-sm font-bold text-black transition-all hover:bg-[#d8b53c] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#BF980D] ${focusRing}`}
-              >
-                {unavailable
-                  ? statusLabel
-                  : justAdded
-                    ? "Added to cart ✓"
-                    : "Add to Cart"}
-              </button>
-
-              {/* CTA */}
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {/* Add to Cart */}
                 <button
                   type="button"
-                  disabled={car.status === "sold"}
-                  onClick={() => setTestDriveOpen(true)}
-                  className={`inline-flex items-center justify-center rounded-full border border-[#BF980D]/60 bg-[#BF980D]/10 px-5 py-3.5 text-sm font-bold text-[#F3D77A] transition-all hover:bg-[#BF980D]/20 disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                  disabled={unavailable}
+                  onClick={handleAddToCart}
+                  className={`mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#BF980D] px-5 py-3.5 text-sm font-bold text-black transition-all hover:bg-[#d8b53c] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#BF980D] ${focusRing}`}
                 >
-                  Book a test drive
+                  {unavailable
+                    ? statusLabel
+                    : justAdded
+                      ? "Added to cart ✓"
+                      : "Add to Cart"}
                 </button>
 
-                <Link
-                  href="/showroom"
-                  className={`inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-semibold text-white transition-all hover:border-[#BF980D] hover:bg-[#BF980D]/10 ${focusRing}`}
-                >
-                  Browse more cars
-                </Link>
-              </div>
-            </aside>
+                {/* CTA */}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={car.status === "sold"}
+                    onClick={() => setTestDriveOpen(true)}
+                    className={`inline-flex items-center justify-center rounded-full border border-[#BF980D]/60 bg-[#BF980D]/10 px-5 py-3.5 text-sm font-bold text-[#F3D77A] transition-all hover:bg-[#BF980D]/20 disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                  >
+                    Book a test drive
+                  </button>
+
+                  <Link
+                    href="/showroom"
+                    className={`inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-semibold text-white transition-all hover:border-[#BF980D] hover:bg-[#BF980D]/10 ${focusRing}`}
+                  >
+                    Browse more cars
+                  </Link>
+                </div>
+              </aside>
+
+              {/* Financing (now under the info card) */}
+              <FinancingCalculator
+                key={`financing-${car.id}`}
+                carName={car.name}
+                price={car.price}
+                year={car.year}
+              />
+            </div>
           </div>
 
           {/* Highlights */}
